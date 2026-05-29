@@ -44,49 +44,72 @@ Open the DB as a full page in the browser. URL is `notion.so/<workspace>/<32-cha
 
 ## Phase 2 — Shortcut #1: Manual
 
-In the Shortcuts app, name it **Log Expense**. Action sequence:
+In the Shortcuts app, name it **Log Expense**.
 
-1. **Ask for Input** — "Amount?" — Number — save as `Amount`.
-2. **Ask for Input** — "Merchant?" — Text — save as `Merchant`.
-3. **Choose from List** — Category options (matching the Notion Select) — save as `Category`.
-4. **Choose from List** — Account options — save as `Account`.
-5. **Current Date** → **Format Date** → ISO 8601, format `yyyy-MM-dd` — save as `Today`.
-6. **Dictionary**:
+> **Magic Variables:** every action's output is a "Magic Variable" — a coloured pill you drop into later actions. To insert one, tap inside a field and pick from the chip row above the keyboard. Rename each action's output (tap the pill at the top of the action) so it reads `Amount`, `Merchant`, etc. instead of `Provided Input`.
 
-```
-parent:
-  database_id: <YOUR_DB_ID>
-properties:
-  Merchant:
-    title:
-      - text:
-          content: [Merchant]
-  Amount:
-    number: [Amount]
-  Date:
-    date:
-      start: [Today]
-  Category:
-    select:
-      name: [Category]
-  Account:
-    select:
-      name: [Account]
-  Auto-logged:
-    checkbox: false
-```
+### Action sequence
 
-7. **Get Contents of URL**:
-   - URL: `https://api.notion.com/v1/pages`
-   - Method: `POST`
-   - Headers:
-     - `Authorization: Bearer <YOUR_TOKEN>`
-     - `Notion-Version: 2022-06-28`
-     - `Content-Type: application/json`
-   - Request Body: **JSON** → reference the Dictionary.
-8. **Show Notification** — "Logged RM[Amount] at [Merchant]".
+1. **Ask for Input** — Prompt `Amount?`, **Input Type: Number**. Rename output → `Amount`.
+2. **Ask for Input** — Prompt `Merchant?`, Input Type: Text. Rename output → `Merchant`.
+3. **Choose from List** — items: `Food`, `Transport`, `Groceries`, `Bills`, `Entertainment`, `Shopping`, `Health`, `Other`. Rename output → `Category`.
+4. **Choose from List** — items: `Apple Pay`, `Maybank`, `CIMB`, `Cash`, `Other`. Rename output → `Account`.
+5. **Current Date**.
+6. **Format Date** — Date Format: **Custom**, Format String: `yyyy-MM-dd`. Feed Current Date in. Rename output → `Today`. (Without this step the date arrives as `29/05/2026, 12:00`, which Notion rejects — it needs ISO 8601.)
+7. **Text** — paste the JSON below, then replace each `[bracketed]` placeholder by inserting the matching Magic Variable. **Amount stays unquoted; everything else stays inside its quotes.**
 
-Add to Home Screen, Lock Screen widget, and (iPhone 15 Pro / 16+) the Action Button.
+   ```json
+   {
+     "parent": { "database_id": "<YOUR_DB_ID>" },
+     "properties": {
+       "Merchant": {
+         "title": [ { "text": { "content": "[Merchant]" } } ]
+       },
+       "Amount": { "number": [Amount] },
+       "Date": { "date": { "start": "[Today]" } },
+       "Category": { "select": { "name": "[Category]" } },
+       "Account": { "select": { "name": "[Account]" } },
+       "Auto-logged": { "checkbox": false }
+     }
+   }
+   ```
+
+   > ⚠️ **Smart-quote trap.** iOS auto-replaces `"` with curly `" "`, which is not valid JSON. Before pasting: **Settings → General → Keyboard → turn off Smart Punctuation**. If you've already pasted, retype every `"` after disabling it.
+
+8. **Get Contents of URL** — URL `https://api.notion.com/v1/pages`. Expand Show More:
+   - **Method:** `POST`
+   - **Headers:**
+     - `Authorization` → `Bearer <YOUR_TOKEN>`
+     - `Notion-Version` → `2022-06-28`
+     - `Content-Type` → `application/json`
+   - **Request Body:** **File** → insert the Text action's Magic Variable. (If File misbehaves, switch to **JSON** with the same Text variable as input.)
+9. **Show Notification** — `Logged RM[Amount] at [Merchant]`.
+
+### Test and debug
+
+Run the shortcut with ▶︎. On success, a new row appears in Notion within ~1s.
+
+If it fails, drop a **Quick Look** action between the Text action and `Get Contents of URL`, run again, and inspect the actual body. Common Notion responses and what they mean:
+
+| Response | Cause |
+| --- | --- |
+| `invalid_json` with `"number": ,` | `Amount` Magic Variable didn't insert. Re-add it; confirm step 1 has Input Type Number. |
+| `invalid_json` with curly `"…"` | Smart Punctuation is on. Disable and retype quotes. |
+| `validation_error` mentioning `start` | Date is `29/05/2026, …` not `2026-05-29`. The `Format Date` step is missing or you inserted Current Date instead of `Today`. |
+| `unauthorized` | Token wrong, or DB isn't connected to the integration (DB → ⋯ → Connections). |
+| `object_not_found` | `database_id` typo, or DB not shared with the integration. |
+| `validation_error` on a `select` property | The value doesn't exactly match an option in Notion (case-sensitive). |
+
+### Place the shortcut
+
+- **Home Screen:** long-press in the Shortcuts app → Share → Add to Home Screen.
+- **Lock Screen widget:** Customize Lock Screen → Add Widget → Shortcuts → pick `Log Expense`.
+- **Action Button** (iPhone 15 Pro / 16+): Settings → Action Button → Shortcut → `Log Expense`. Biggest QoL win — one press after paying.
+- **Siri:** "Hey Siri, log expense" works automatically by name.
+
+### Alternative: build the JSON with the Dictionary action
+
+The Text-action approach above is recommended because the body is readable in one screen. If you prefer the typed Dictionary action, build this structure — at the top level use two keys of type `Dictionary` (`parent`, `properties`); inside `properties`, six `Dictionary` keys whose contents mirror the JSON above. `Merchant.title` requires an `Array` whose single item is a Dictionary. It works, it's just slow to enter and hard to debug.
 
 ---
 
