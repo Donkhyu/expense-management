@@ -20,7 +20,7 @@ Plus monthly reconciliation against the bank statement for whatever the auto pat
 | `Date`        | Date     |                                                                      |
 | `Amount`      | Number   | Plain number; MYR implicit                                           |
 | `Category`    | Select   | Food, Transport, Groceries, Bills, Entertainment, Shopping, Health, Other |
-| `Account`     | Select   | Apple Pay, Maybank, CIMB, Cash, Other                                |
+| `Account`     | Select   | Debit, Cash                                                          |
 | `Notes`       | Text     | Corrections, context                                                 |
 | `Auto-logged` | Checkbox | Distinguishes auto entries from manual                               |
 
@@ -53,7 +53,7 @@ In the Shortcuts app, name it **Log Expense**.
 1. **Ask for Input** — Prompt `Amount?`, **Input Type: Number**. Rename output → `Amount`.
 2. **Ask for Input** — Prompt `Merchant?`, Input Type: Text. Rename output → `Merchant`.
 3. **Choose from List** — items: `Food`, `Transport`, `Groceries`, `Bills`, `Entertainment`, `Shopping`, `Health`, `Other`. Rename output → `Category`.
-4. **Choose from List** — items: `Apple Pay`, `Maybank`, `CIMB`, `Cash`, `Other`. Rename output → `Account`.
+4. **Choose from List** — items: `Debit`, `Cash`. Rename output → `Account`.
 5. **Current Date**.
 6. **Format Date** — Date Format: **Custom**, Format String: `yyyy-MM-dd`. Feed Current Date in. Rename output → `Today`. (Without this step the date arrives as `29/05/2026, 12:00`, which Notion rejects — it needs ISO 8601.)
 7. **Text** — paste the JSON below, then replace each `[bracketed]` placeholder by inserting the matching Magic Variable. **Amount stays unquoted; everything else stays inside its quotes.**
@@ -113,21 +113,76 @@ The Text-action approach above is recommended because the body is readable in on
 
 ---
 
-## Phase 3 — Shortcut #2: Auto (notification-triggered)
+## Phase 3 — Shortcut #2: Auto (HLB notification-triggered)
 
-In Shortcuts → **Automation** tab → **+** → **New Automation**:
+Reference notification (Hong Leong Bank `Transaction Notice`):
 
-1. Trigger: **App** → bank app (MAE for Maybank, CIMB OCTO for CIMB) → **Is Notified**.
-   - If "Is Notified" isn't available on your iOS, fall back to a Share Sheet shortcut: long-press the bank notification → Share → run shortcut.
-2. **Run Immediately** on; **Notify When Run** off.
-3. The trigger provides a `Notification` variable with the body text. Add:
-   - **Match Text** — regex for amount, e.g. `RM\s?([0-9,]+\.[0-9]{2})` — capture Group 1 → `Amount`.
-   - **Match Text** — regex for merchant — bank-specific; tune against real notifications.
-   - **If** `Amount` is empty → exit (notification wasn't a transaction).
-4. **Choose from List** → Category (set this manually; auto-categorization is brittle).
-5. Same Notion POST as Shortcut #1, but with `Auto-logged: true` and `Account` hardcoded to that bank.
+```
+Your card ending 8233 has been debited for MYR6.60 at ECO MART - RESI 121 using Apple Pay. Please call us if you did not make this transaction.
+```
 
-**Tuning the regex:** trigger one small real transaction first, screenshot the actual notification, and write the regex against that exact wording. Don't trust generic patterns.
+Whether the transaction was Apple Pay or a direct card swipe, the money comes from the same HLB debit account, so `Account` is hardcoded to `Debit` — no branching needed.
+
+### Build the shortcut
+
+In Shortcuts: long-press `Log Expense` → **Duplicate** → rename to `Log Expense (Auto - HLB)`.
+
+In the duplicate, delete:
+- Ask for Input "Amount?"
+- Ask for Input "Merchant?"
+- Choose from List → Account
+
+Then add, above the Text (JSON) action:
+
+1. **Receive input** at the start — Shortcut Input type **Text**. Rename → `NotificationText`.
+2. **Match Text** on `NotificationText` with regex:
+   ```
+   MYR\s?([0-9,]+\.[0-9]{2})
+   ```
+   Set **Group Index = 1**. Rename → `Amount`.
+3. **If** `Amount` does not have any value → **Stop Shortcut**. End If. (Filters out non-transaction notifications.)
+4. **Match Text** on `NotificationText` with regex:
+   ```
+   at (.+?)(?: using Apple Pay|\. Please)
+   ```
+   Group Index = 1. Rename → `Merchant`. The alternation handles both Apple Pay and direct-card wording; if HLB changes the wording, this is the line to retune.
+5. **Text** action: `Debit`. Rename → `Account`.
+
+In the existing Text (JSON) action, flip:
+
+```json
+"Auto-logged": { "checkbox": false }
+```
+
+to
+
+```json
+"Auto-logged": { "checkbox": true }
+```
+
+Everything else (Choose from List → Category, Current Date, Format Date, Get Contents of URL, Show Notification) stays as-is — the existing `[Amount]`, `[Merchant]`, `[Today]`, `[Category]`, `[Account]` pills automatically pick up the new sources.
+
+### Create the Personal Automation
+
+Shortcuts → **Automation** tab → **+** → **New Automation** → scroll to **App** → tap → search **HLB Connect** (or whichever HLB app actually posts the `Transaction Notice` — verify by long-pressing a real notification) → Next → choose **Is Notified** (iOS 26 may also show this as "Sends Notification" or "Notification Received").
+
+- **Action:** Run Shortcut → `Log Expense (Auto - HLB)`.
+- **Run Immediately:** ON.
+- **Notify When Run:** ON initially (so you can see when it fires); turn off once you trust it.
+
+If the HLB app doesn't offer any notification-related trigger, that bank app delivers via a system service Shortcuts can't intercept — fall back to a Share Sheet shortcut (long-press the notification → Share → Run Shortcut).
+
+### Test
+
+1. Trigger one small Apple Pay transaction (RM1–5).
+2. Expect: HLB notification → Shortcuts run notification → Category prompt → row in Notion with `Account: Debit`, `Auto-logged: true`.
+3. Do one direct card transaction (online purchase, or contactless physical card without Apple Pay). If the merchant comes back empty, the wording after the merchant isn't `. Please call us…` — capture that notification, update the alternation in step 4.
+
+### Caveats
+
+- **SMS-only transactions are missed.** Some HLB transactions (ATM withdrawals, certain transfers) only send SMS, and iOS doesn't expose SMS to Shortcuts. Monthly reconciliation catches these.
+- **iOS occasionally pauses Personal Automations** that don't run for a while. Check the Automation tab if entries stop appearing.
+- **Notification copy is brittle.** If HLB refreshes their app's wording, the regexes break. Easy to re-tune when it happens.
 
 ---
 
