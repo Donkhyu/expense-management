@@ -4,27 +4,46 @@ Personal expense logging via iOS Shortcuts → Notion. Two shortcuts:
 1. **Manual** — tap after a purchase (Home Screen / Lock Screen / Action Button).
 2. **Auto** — Personal Automation triggered by a bank app's transaction notification.
 
-Plus monthly reconciliation against the bank statement for whatever the auto path misses.
+Every expense links to a single **bank-balance account**, and a formula keeps a live running balance (starting balance − everything spent). Plus monthly reconciliation against the bank statement for whatever the auto path misses.
 
-> **Secrets:** never commit your Notion integration token or database ID. Store them only in the Shortcut on your phone. Placeholders below: `<YOUR_TOKEN>`, `<YOUR_DB_ID>`.
+> **Secrets:** never commit your Notion integration token. Store it only in the Shortcut on your phone. Placeholders below: `<YOUR_TOKEN>`, `<YOUR_DB_ID>`, `<ACCOUNT_PAGE_ID>`.
 
 ---
 
 ## Phase 1 — Notion
 
-### Create the database
+The setup uses **two databases**: `Expenses` (one row per purchase) and `Accounts` (a single row holding your bank balance). Expenses link to the account via a Relation, and a rollup + formula on the account turn that into a live balance.
 
-| Property      | Type     | Notes                                                                |
-| ------------- | -------- | -------------------------------------------------------------------- |
-| `Merchant`    | Title    | Row's primary field                                                  |
-| `Date`        | Date     |                                                                      |
-| `Amount`      | Number   | Plain number; MYR implicit                                           |
-| `Category`    | Select   | Food, Transport, Groceries, Bills, Entertainment, Shopping, Health, Other |
-| `Account`     | Select   | Apple Pay, Maybank, CIMB, Cash, Other                                |
-| `Notes`       | Text     | Corrections, context                                                 |
-| `Auto-logged` | Checkbox | Distinguishes auto entries from manual                               |
+### `Expenses` database
 
-Keep `Category` and `Account` as **Select**, not Relation — keeps the Shortcut JSON simple.
+| Property      | Type             | Notes                                                                      |
+| ------------- | ---------------- | -------------------------------------------------------------------------- |
+| `Merchant`    | Title            | Row's primary field                                                        |
+| `Date`        | Date             |                                                                            |
+| `Amount`      | Number           | Plain number; MYR implicit                                                 |
+| `Category`    | Select           | Food, Transport, Groceries, Bills, Entertainment, Shopping, Health, Other  |
+| `Account`     | Relation         | → `Accounts`. Every expense points at the one bank-balance row             |
+| `Notes`       | Text             | Corrections, context                                                       |
+| `Auto-logged` | Checkbox         | Distinguishes auto entries from manual                                     |
+| `Delta`       | Formula          | `-Amount` — the signed effect on the balance, summed by the account rollup |
+
+Keep `Category` as a **Select** (keeps the Shortcut JSON simple). `Account` is a **Relation**, not a Select — that's what powers the auto-updating balance below.
+
+### `Accounts` database
+
+A single row (e.g. `💰 Main balance`) representing your bank account.
+
+| Property           | Type      | Notes                                                            |
+| ------------------ | --------- | ---------------------------------------------------------------- |
+| `Account`          | Title     | The account name                                                 |
+| `Starting balance` | Number    | Your bank balance at the moment you started logging              |
+| `Expenses`         | Relation  | Auto-created reverse side of `Expenses.Account`                  |
+| `Expenses total`   | Rollup    | Sum of `Delta` (or `Amount`) across all related expenses         |
+| `Current balance`  | Formula   | `Starting balance + Expenses total` → the live running balance   |
+
+**How auto-balance works:** the Shortcut hard-links every new expense to this one account row. The rollup re-totals spending and `Current balance` recalculates instantly — no manual updating. Because there's a single account, the Shortcut never has to ask which account to use.
+
+> Tracking only the bank balance (not cash) is intentional — it keeps things to one account with zero per-expense choices.
 
 ### Create the integration
 
@@ -34,11 +53,12 @@ Keep `Category` and `Account` as **Select**, not Relation — keeps the Shortcut
 
 ### Connect the database to the integration
 
-Open the DB → top-right `⋯` → **Connections** → Connect to → "Expense Shortcut".
+Open the **`Expenses`** DB → top-right `⋯` → **Connections** → Connect to → "Expense Shortcut".
 
-### Grab the database ID
+### Grab the IDs you'll need in the Shortcut
 
-Open the DB as a full page in the browser. URL is `notion.so/<workspace>/<32-char-id>?v=...`. The 32-char hex string is the DB ID.
+- **`<YOUR_DB_ID>`** — open the `Expenses` DB as a full page in the browser. URL is `notion.so/<workspace>/<32-char-id>?v=...`. The 32-char hex string is the DB ID.
+- **`<ACCOUNT_PAGE_ID>`** — open the single account row (`Main balance`) as a full page. The 32-char hex string in its URL is the page ID. This is what the `Account` relation points to.
 
 ---
 
@@ -53,10 +73,9 @@ In the Shortcuts app, name it **Log Expense**.
 1. **Ask for Input** — Prompt `Amount?`, **Input Type: Number**. Rename output → `Amount`.
 2. **Ask for Input** — Prompt `Merchant?`, Input Type: Text. Rename output → `Merchant`.
 3. **Choose from List** — items: `Food`, `Transport`, `Groceries`, `Bills`, `Entertainment`, `Shopping`, `Health`, `Other`. Rename output → `Category`.
-4. **Choose from List** — items: `Apple Pay`, `Maybank`, `CIMB`, `Cash`, `Other`. Rename output → `Account`.
-5. **Current Date**.
-6. **Format Date** — Date Format: **Custom**, Format String: `yyyy-MM-dd`. Feed Current Date in. Rename output → `Today`. (Without this step the date arrives as `29/05/2026, 12:00`, which Notion rejects — it needs ISO 8601.)
-7. **Text** — paste the JSON below, then replace each `[bracketed]` placeholder by inserting the matching Magic Variable. **Amount stays unquoted; everything else stays inside its quotes.**
+4. **Current Date**.
+5. **Format Date** — Date Format: **Custom**, Format String: `yyyy-MM-dd`. Feed Current Date in. Rename output → `Today`. (Without this step the date arrives as `29/05/2026, 12:00`, which Notion rejects — it needs ISO 8601.)
+6. **Text** — paste the JSON below, then replace each `[bracketed]` placeholder by inserting the matching Magic Variable. **Amount stays unquoted; everything else stays inside its quotes.** `Account` has no chooser — it's hardcoded to your one account, so paste your `<ACCOUNT_PAGE_ID>` once and forget it.
 
    ```json
    {
@@ -68,26 +87,28 @@ In the Shortcuts app, name it **Log Expense**.
        "Amount": { "number": [Amount] },
        "Date": { "date": { "start": "[Today]" } },
        "Category": { "select": { "name": "[Category]" } },
-       "Account": { "select": { "name": "[Account]" } },
+       "Account": { "relation": [ { "id": "<ACCOUNT_PAGE_ID>" } ] },
        "Auto-logged": { "checkbox": false }
      }
    }
    ```
 
+   > The `Account` relation takes the account **page** ID (with or without dashes), not the database ID. Linking it is what makes `Current balance` drop by the amount you just logged.
+
    > ⚠️ **Smart-quote trap.** iOS auto-replaces `"` with curly `" "`, which is not valid JSON. Before pasting: **Settings → General → Keyboard → turn off Smart Punctuation**. If you've already pasted, retype every `"` after disabling it.
 
-8. **Get Contents of URL** — URL `https://api.notion.com/v1/pages`. Expand Show More:
+7. **Get Contents of URL** — URL `https://api.notion.com/v1/pages`. Expand Show More:
    - **Method:** `POST`
    - **Headers:**
      - `Authorization` → `Bearer <YOUR_TOKEN>`
      - `Notion-Version` → `2022-06-28`
      - `Content-Type` → `application/json`
    - **Request Body:** **File** → insert the Text action's Magic Variable. (If File misbehaves, switch to **JSON** with the same Text variable as input.)
-9. **Show Notification** — `Logged RM[Amount] at [Merchant]`.
+8. **Show Notification** — `Logged RM[Amount] at [Merchant]`.
 
 ### Test and debug
 
-Run the shortcut with ▶︎. On success, a new row appears in Notion within ~1s.
+Run the shortcut with ▶︎. On success, a new row appears in Notion within ~1s and `Current balance` on the account drops by the amount.
 
 If it fails, drop a **Quick Look** action between the Text action and `Get Contents of URL`, run again, and inspect the actual body. Common Notion responses and what they mean:
 
@@ -98,7 +119,8 @@ If it fails, drop a **Quick Look** action between the Text action and `Get Conte
 | `validation_error` mentioning `start` | Date is `29/05/2026, …` not `2026-05-29`. The `Format Date` step is missing or you inserted Current Date instead of `Today`. |
 | `unauthorized` | Token wrong, or DB isn't connected to the integration (DB → ⋯ → Connections). |
 | `object_not_found` | `database_id` typo, or DB not shared with the integration. |
-| `validation_error` on a `select` property | The value doesn't exactly match an option in Notion (case-sensitive). |
+| `validation_error` on the `Account` relation | The `<ACCOUNT_PAGE_ID>` is wrong, or it's the database ID instead of the account row's page ID. |
+| `validation_error` on the `Category` select | The value doesn't exactly match an option in Notion (case-sensitive). |
 
 ### Place the shortcut
 
@@ -109,7 +131,7 @@ If it fails, drop a **Quick Look** action between the Text action and `Get Conte
 
 ### Alternative: build the JSON with the Dictionary action
 
-The Text-action approach above is recommended because the body is readable in one screen. If you prefer the typed Dictionary action, build this structure — at the top level use two keys of type `Dictionary` (`parent`, `properties`); inside `properties`, six `Dictionary` keys whose contents mirror the JSON above. `Merchant.title` requires an `Array` whose single item is a Dictionary. It works, it's just slow to enter and hard to debug.
+The Text-action approach above is recommended because the body is readable in one screen. If you prefer the typed Dictionary action, build this structure — at the top level use two keys of type `Dictionary` (`parent`, `properties`); inside `properties`, mirror the JSON above. `Merchant.title` requires an `Array` whose single item is a Dictionary, and `Account.relation` is an `Array` whose single item is a Dictionary with an `id` key. It works, it's just slow to enter and hard to debug.
 
 ---
 
@@ -125,7 +147,7 @@ In Shortcuts → **Automation** tab → **+** → **New Automation**:
    - **Match Text** — regex for merchant — bank-specific; tune against real notifications.
    - **If** `Amount` is empty → exit (notification wasn't a transaction).
 4. **Choose from List** → Category (set this manually; auto-categorization is brittle).
-5. Same Notion POST as Shortcut #1, but with `Auto-logged: true` and `Account` hardcoded to that bank.
+5. Same Notion POST as Shortcut #1, with the same hardcoded `Account` relation, but with `"Auto-logged": true`.
 
 **Tuning the regex:** trigger one small real transaction first, screenshot the actual notification, and write the regex against that exact wording. Don't trust generic patterns.
 
@@ -133,4 +155,4 @@ In Shortcuts → **Automation** tab → **+** → **New Automation**:
 
 ## Monthly reconciliation
 
-Once a month, skim your bank statement against the Notion DB. Anything missing → log via Shortcut #1 with `(reconciled)` in `Notes`. This is the ~10-30% the auto path won't catch (cash, transfers, missed notifications, wording changes).
+Once a month, skim your bank statement against the Notion DB. Anything missing → log via Shortcut #1 with `(reconciled)` in `Notes`. This is the ~10-30% the auto path won't catch (transfers, missed notifications, wording changes). Since the balance is driven entirely by logged expenses, reconciling also keeps `Current balance` honest — if it drifts from the real bank balance, a transaction was missed.
