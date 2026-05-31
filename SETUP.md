@@ -1,12 +1,22 @@
 # Setup
 
 Personal expense logging via iOS Shortcuts → Notion. Two shortcuts:
-1. **Manual** — tap after a purchase (Home Screen / Lock Screen / Action Button).
-2. **Auto** — Personal Automation triggered by a bank app's transaction notification.
+1. **Manual** — tap after a purchase, type amount/merchant (Home Screen / Lock Screen / Action Button).
+2. **Alert parser** — copy a Hong Leong Bank transaction alert and run the shortcut; it extracts amount + merchant for you. Build guide: **`SHORTCUT.md`**.
 
-Every expense links to a single **bank-balance account**, and a formula keeps a live running balance (starting balance − everything spent). Plus monthly reconciliation against the bank statement for whatever the auto path misses.
+Every expense links to a single **bank-balance account**, and a formula keeps a live running balance (starting balance − everything spent). Plus monthly reconciliation against the bank statement for whatever the alert parser misses.
 
-> **Secrets:** never commit your Notion integration token. Store it only in the Shortcut on your phone. Placeholders below: `<YOUR_TOKEN>`, `<YOUR_DB_ID>`, `<ACCOUNT_PAGE_ID>`.
+> **Secrets:** never commit your Notion integration token. Store it only in the Shortcut on your phone. The only true secret is `<YOUR_TOKEN>`; the database and account IDs below are not secret (you still need the token to use them).
+
+### Reference — this workspace's IDs
+
+| Placeholder         | Value                                                              |
+| ------------------- | ------------------------------------------------------------------ |
+| `<YOUR_DB_ID>`      | `36ec4ed7327b8083a0dec2161698e9ff` (Expenses database)             |
+| `<ACCOUNT_PAGE_ID>` | `afc516a99cdf4dc9b16d08a11ccc2ace` (🏦 Bank balance account row)    |
+| `<YOUR_TOKEN>`      | **secret** — store on-device only                                  |
+
+The databases live under a **💰 Expense Management** page, which also serves as a dashboard (auto-balance callout + both databases inline).
 
 ---
 
@@ -20,7 +30,7 @@ The setup uses **two databases**: `Expenses` (one row per purchase) and `Account
 | ------------- | ---------------- | -------------------------------------------------------------------------- |
 | `Merchant`    | Title            | Row's primary field                                                        |
 | `Date`        | Date             |                                                                            |
-| `Amount`      | Number           | Plain number; MYR implicit                                                 |
+| `Amount`      | Number           | Number format set to **Ringgit** (RM)                                      |
 | `Category`    | Select           | Food, Transport, Groceries, Bills, Entertainment, Shopping, Health, Other  |
 | `Account`     | Relation         | → `Accounts`. Every expense points at the one bank-balance row             |
 | `Notes`       | Text             | Corrections, context                                                       |
@@ -31,7 +41,7 @@ Keep `Category` as a **Select** (keeps the Shortcut JSON simple). `Account` is a
 
 ### `Accounts` database
 
-A single row (e.g. `💰 Main balance`) representing your bank account.
+A single row (`🏦 Bank balance`) representing your bank account.
 
 | Property           | Type      | Notes                                                            |
 | ------------------ | --------- | ---------------------------------------------------------------- |
@@ -51,14 +61,20 @@ A single row (e.g. `💰 Main balance`) representing your bank account.
 2. Capabilities: Insert + Update + Read content.
 3. Copy the Internal Integration Token (`secret_...` or `ntn_...`). Store in iOS Passwords / 1Password.
 
-### Connect the database to the integration
+### Connect the databases to the integration
 
-Open the **`Expenses`** DB → top-right `⋯` → **Connections** → Connect to → "Expense Shortcut".
+The integration needs access to **both** databases: it writes to `Expenses`, and the
+`Account` relation points at a row in `Accounts` — if `Accounts` isn't shared, the API
+returns `object_not_found` on the relation even though the row exists.
+
+Easiest: open the **💰 Expense Management** page → top-right `⋯` → **Connections** →
+add **Expense Shortcut**. Connecting at the parent page cascades to both child
+databases. (Or connect `Expenses` and `Accounts` individually.)
 
 ### Grab the IDs you'll need in the Shortcut
 
 - **`<YOUR_DB_ID>`** — open the `Expenses` DB as a full page in the browser. URL is `notion.so/<workspace>/<32-char-id>?v=...`. The 32-char hex string is the DB ID.
-- **`<ACCOUNT_PAGE_ID>`** — open the single account row (`Main balance`) as a full page. The 32-char hex string in its URL is the page ID. This is what the `Account` relation points to.
+- **`<ACCOUNT_PAGE_ID>`** — open the single account row (`🏦 Bank balance`) as a full page. The 32-char hex string in its URL is the page ID. This is what the `Account` relation points to. (Concrete values are in the *Reference — this workspace's IDs* table near the top.)
 
 ---
 
@@ -135,24 +151,26 @@ The Text-action approach above is recommended because the body is readable in on
 
 ---
 
-## Phase 3 — Shortcut #2: Auto (notification-triggered)
+## Phase 3 — Shortcut #2: Alert parser
 
-In Shortcuts → **Automation** tab → **+** → **New Automation**:
+This is the low-effort path: instead of typing amount + merchant, you copy a Hong Leong
+Bank transaction alert and the shortcut parses both fields out of the text, then logs
+with `Auto-logged: true`.
 
-1. Trigger: **App** → bank app (MAE for Maybank, CIMB OCTO for CIMB) → **Is Notified**.
-   - If "Is Notified" isn't available on your iOS, fall back to a Share Sheet shortcut: long-press the bank notification → Share → run shortcut.
-2. **Run Immediately** on; **Notify When Run** off.
-3. The trigger provides a `Notification` variable with the body text. Add:
-   - **Match Text** — regex for amount, e.g. `RM\s?([0-9,]+\.[0-9]{2})` — capture Group 1 → `Amount`.
-   - **Match Text** — regex for merchant — bank-specific; tune against real notifications.
-   - **If** `Amount` is empty → exit (notification wasn't a transaction).
-4. **Choose from List** → Category (set this manually; auto-categorization is brittle).
-5. Same Notion POST as Shortcut #1, with the same hardcoded `Account` relation, but with `"Auto-logged": true`.
+**Full build guide: [`SHORTCUT.md`](./SHORTCUT.md).** In short:
 
-**Tuning the regex:** trigger one small real transaction first, screenshot the actual notification, and write the regex against that exact wording. Don't trust generic patterns.
+1. Copy the alert text from the HLB app's transaction detail (push banners can't be copied).
+2. Run **Log Expense from Alert** → it runs `Match Text` regexes to pull `Amount` and
+   `Merchant`, you tap a `Category`, and it POSTs the same body as Shortcut #1 (same
+   hardcoded `Account` relation) with `"Auto-logged": true`.
+
+> **iOS reality:** Shortcuts cannot auto-trigger on a third-party app's *push*
+> notification, so this is started manually (Share Sheet / Back Tap / widget). A fully
+> automatic "Is Notified" automation only works for apps that expose that trigger and
+> isn't available for the HLB push alerts — hence the copy-and-run design.
 
 ---
 
 ## Monthly reconciliation
 
-Once a month, skim your bank statement against the Notion DB. Anything missing → log via Shortcut #1 with `(reconciled)` in `Notes`. This is the ~10-30% the auto path won't catch (transfers, missed notifications, wording changes). Since the balance is driven entirely by logged expenses, reconciling also keeps `Current balance` honest — if it drifts from the real bank balance, a transaction was missed.
+Once a month, skim your bank statement against the Notion DB. Anything missing → log via Shortcut #1 with `(reconciled)` in `Notes`. This is the ~10-30% the alert parser won't catch (transfers, alerts you didn't copy, wording changes). Since the balance is driven entirely by logged expenses, reconciling also keeps `Current balance` honest — if it drifts from the real bank balance, a transaction was missed.
