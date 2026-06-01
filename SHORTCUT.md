@@ -31,9 +31,15 @@ account balance updates automatically (see `SETUP.md` for the Notion side).
 | ---------------- | ---------------------------------------------------------------------------------- | ----------------- | ------- |
 | Card / Apple Pay | `Your card ending 8233 has been debited for MYR23.80 at BOOST JUICE TRX using Apple Pay.` | `BOOST JUICE TRX` | `23.80` |
 | QR payment       | `Your QR payment of RM3.50 to WOF SUBANG ELITE is SUCCESSFUL.`                      | `WOF SUBANG ELITE`| `3.50`  |
+| Transfer         | `Your transfer of RM20.00 to DEON HIU JIU WE at TOUCH 'n GO is SUCCESSFUL`          | `TOUCH 'n GO` (destination; recipient → Notes) | `20.00` |
 
-If HLB sends other wordings (transfers, refunds, reversals), add another `Match Text`
-branch — the `If has no value` chain in step 4 extends cleanly.
+If HLB sends still other wordings (refunds, reversals), add another branch in step 4 —
+match on a keyword unique to that template, then extract with its own regex.
+
+> **Note on transfers.** A transfer to your own e-wallet (like this Touch 'n Go top-up)
+> isn't really *spending* — but it does leave your bank account, so logging it keeps the
+> balance accurate. Pick category `Other`, or add a `Transfer` option to the `Category`
+> select if you'd like to exclude these from spend analysis.
 
 ---
 
@@ -52,16 +58,19 @@ In the Shortcuts app, create a new shortcut named **Log Expense from Alert**.
    (?:MYR|RM)\s*([0-9,]+\.[0-9]{2})
    ```
    → **Get Group at Index** `1` → **Replace Text** (find `,`, replace empty) → rename → `Amount`.
-3. **Match Text** on `AlertText` — Merchant (card format):
-   ```
-   at (.+?) using
-   ```
-   → **Get Group at Index** `1` → rename → `Merchant`.
-4. **If** `Merchant` **has no value** → **Match Text** on `AlertText` (QR format):
-   ```
-   to (.+?) is
-   ```
-   → **Get Group at Index** `1` → set `Merchant`. **End If**.
+3. **Text** action containing nothing → rename → `Notes`. (Only the transfer branch
+   overwrites it; the others leave it empty.)
+4. **Branch by template** to fill `Merchant` (and `Notes` for transfers). Build this as
+   nested **If / Otherwise** actions on `AlertText`, in this order — a transfer also
+   contains "to … is", so it must be tested *before* the QR pattern:
+
+   | Test: `AlertText` **contains** | Merchant — `Match Text` → Group 1 | Also set |
+   | ------------------------------ | --------------------------------- | -------- |
+   | `transfer of`                  | `at (.+?) is` → destination       | `Notes` ← `transfer of .+? to (.+?) at` (recipient) |
+   | `QR payment`                   | `to (.+?) is`                     | —        |
+   | *(otherwise — card)*           | `at (.+?) using`                  | —        |
+
+   So: `If contains "transfer of"` → … `Otherwise` → `If contains "QR payment"` → … `Otherwise` → card. Each branch ends with **Get Group at Index** `1` → set `Merchant`.
 5. **Choose from Menu** — `Food`, `Transport`, `Groceries`, `Bills`, `Entertainment`,
    `Shopping`, `Health`, `Other` → rename → `Category`. (See *Auto-category* below to
    skip this for known merchants.)
@@ -78,6 +87,7 @@ In the Shortcuts app, create a new shortcut named **Log Expense from Alert**.
        "Date":        { "date":     { "start": "[Today]" } },
        "Category":    { "select":   { "name": "[Category]" } },
        "Account":     { "relation": [ { "id": "<ACCOUNT_PAGE_ID>" } ] },
+       "Notes":       { "rich_text":[ { "text": { "content": "[Notes]" } } ] },
        "Auto-logged": { "checkbox": true }
      }
    }
@@ -97,9 +107,11 @@ In the Shortcuts app, create a new shortcut named **Log Expense from Alert**.
 
 | Field           | Pattern                          | Then                          |
 | --------------- | -------------------------------- | ----------------------------- |
-| Amount          | `(?:MYR\|RM)\s*([0-9,]+\.[0-9]{2})` | Group 1 → strip `,` → Number  |
-| Merchant (card) | `at (.+?) using`                 | Group 1                       |
-| Merchant (QR)   | `to (.+?) is`                    | Group 1                       |
+| Amount              | `(?:MYR\|RM)\s*([0-9,]+\.[0-9]{2})` | Group 1 → strip `,` → Number  |
+| Merchant (card)     | `at (.+?) using`                 | Group 1                       |
+| Merchant (QR)       | `to (.+?) is`                    | Group 1                       |
+| Merchant (transfer) | `at (.+?) is`                    | Group 1 (destination)         |
+| Notes (transfer)    | `transfer of .+? to (.+?) at`    | Group 1 (recipient)           |
 
 iOS **Match Text** uses ICU regex and supports capture groups via **Get Group at Index**.
 
