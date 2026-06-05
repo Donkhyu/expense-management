@@ -12,7 +12,7 @@ Every expense links to a single **bank-balance account**, and a formula keeps a 
 
 | Placeholder         | Value                                                              |
 | ------------------- | ------------------------------------------------------------------ |
-| `<YOUR_DB_ID>`      | `36ec4ed7327b8083a0dec2161698e9ff` (Expenses database)             |
+| `<YOUR_DB_ID>`      | `36ec4ed7327b8083a0dec2161698e9ff` (Transactions database)         |
 | `<ACCOUNT_PAGE_ID>` | `afc516a99cdf4dc9b16d08a11ccc2ace` (🏦 Bank balance account row)    |
 | `<YOUR_TOKEN>`      | **secret** — store on-device only                                  |
 
@@ -22,9 +22,9 @@ The databases live under a **💰 Expense Management** page, which also serves a
 
 ## Phase 1 — Notion
 
-The setup uses **two databases**: `Expenses` (one row per purchase) and `Accounts` (a single row holding your bank balance). Expenses link to the account via a Relation, and a rollup + formula on the account turn that into a live balance.
+The setup uses **two databases**: `Transactions` (one row per money movement — expense *or* income) and `Accounts` (a single row holding your bank balance). Transactions link to the account via a Relation, and a rollup + formula on the account turn that into a live balance.
 
-### `Expenses` database
+### `Transactions` database
 
 | Property      | Type             | Notes                                                                      |
 | ------------- | ---------------- | -------------------------------------------------------------------------- |
@@ -48,8 +48,8 @@ A single row (`🏦 Bank balance`) representing your bank account.
 | ------------------ | --------- | ---------------------------------------------------------------- |
 | `Account`          | Title     | The account name                                                 |
 | `Starting balance` | Number    | Your bank balance at the moment you started logging              |
-| `Expenses`         | Relation  | Auto-created reverse side of `Expenses.Account`                  |
-| `Expenses total`   | Rollup    | Sum of `Delta` (or `Amount`) across all related expenses         |
+| `Expenses`         | Relation  | Auto-created reverse side of `Transactions.Account` (Notion auto-named it) |
+| `Expenses total`   | Rollup    | Net sum of `Delta` across related transactions (income +, expense −)      |
 | `Current balance`  | Formula   | `Starting balance + Expenses total` → the live running balance   |
 
 **How auto-balance works:** the Shortcut hard-links every new expense to this one account row. The rollup re-totals spending and `Current balance` recalculates instantly — no manual updating. Because there's a single account, the Shortcut never has to ask which account to use.
@@ -64,17 +64,17 @@ A single row (`🏦 Bank balance`) representing your bank account.
 
 ### Connect the databases to the integration
 
-The integration needs access to **both** databases: it writes to `Expenses`, and the
+The integration needs access to **both** databases: it writes to `Transactions`, and the
 `Account` relation points at a row in `Accounts` — if `Accounts` isn't shared, the API
 returns `object_not_found` on the relation even though the row exists.
 
 Easiest: open the **💰 Expense Management** page → top-right `⋯` → **Connections** →
 add **Expense Shortcut**. Connecting at the parent page cascades to both child
-databases. (Or connect `Expenses` and `Accounts` individually.)
+databases. (Or connect `Transactions` and `Accounts` individually.)
 
 ### Grab the IDs you'll need in the Shortcut
 
-- **`<YOUR_DB_ID>`** — open the `Expenses` DB as a full page in the browser. URL is `notion.so/<workspace>/<32-char-id>?v=...`. The 32-char hex string is the DB ID.
+- **`<YOUR_DB_ID>`** — open the `Transactions` DB as a full page in the browser. URL is `notion.so/<workspace>/<32-char-id>?v=...`. The 32-char hex string is the DB ID.
 - **`<ACCOUNT_PAGE_ID>`** — open the single account row (`🏦 Bank balance`) as a full page. The 32-char hex string in its URL is the page ID. This is what the `Account` relation points to. (Concrete values are in the *Reference — this workspace's IDs* table near the top.)
 
 ---

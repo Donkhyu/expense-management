@@ -1,7 +1,7 @@
 # iOS Shortcut — Log Expense from a Bank Alert
 
 A single Shortcut that reads a **Hong Leong Bank** transaction alert, extracts the
-**amount** and **merchant**, and posts a row to the Notion `Expenses` database. The
+**amount** and **merchant**, and posts a row to the Notion `Transactions` database. The
 account balance updates automatically (see `SETUP.md` for the Notion side).
 
 > The Notion **token** is the only real secret — keep it on-device. The non-secret
