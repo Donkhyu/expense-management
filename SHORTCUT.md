@@ -88,6 +88,7 @@ In the Shortcuts app, create a new shortcut named **Log Expense from Alert**.
        "Category":    { "select":   { "name": "[Category]" } },
        "Account":     { "relation": [ { "id": "<ACCOUNT_PAGE_ID>" } ] },
        "Notes":       { "rich_text":[ { "text": { "content": "[Notes]" } } ] },
+       "Type":        { "select":   { "name": "Expense" } },
        "Auto-logged": { "checkbox": true }
      }
    }

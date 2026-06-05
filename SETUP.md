@@ -34,8 +34,9 @@ The setup uses **two databases**: `Expenses` (one row per purchase) and `Account
 | `Category`    | Select           | Food, Transport, Groceries, Bills, Entertainment, Shopping, Health, Other  |
 | `Account`     | Relation         | → `Accounts`. Every expense points at the one bank-balance row             |
 | `Notes`       | Text             | Corrections, context                                                       |
+| `Type`        | Select           | `Expense` / `Income`. Blank counts as Expense. Drives `Delta`'s sign       |
 | `Auto-logged` | Checkbox         | Distinguishes auto entries from manual                                     |
-| `Delta`       | Formula          | `-Amount` — the signed effect on the balance, summed by the account rollup |
+| `Delta`       | Formula          | `if(Type == "Income", Amount, -Amount)` — signed balance effect, summed by the account rollup |
 
 Keep `Category` as a **Select** (keeps the Shortcut JSON simple). `Account` is a **Relation**, not a Select — that's what powers the auto-updating balance below.
 
@@ -104,6 +105,7 @@ In the Shortcuts app, name it **Log Expense**.
        "Date": { "date": { "start": "[Today]" } },
        "Category": { "select": { "name": "[Category]" } },
        "Account": { "relation": [ { "id": "<ACCOUNT_PAGE_ID>" } ] },
+       "Type": { "select": { "name": "Expense" } },
        "Auto-logged": { "checkbox": false }
      }
    }
@@ -170,6 +172,28 @@ with `Auto-logged: true`.
 > isn't available for the HLB push alerts — hence the copy-and-run design.
 
 ---
+
+## Adding funds (income)
+
+Money coming *in* — your weekly allowance from family, your monthly internship
+allowance, any deposit — is logged just like an expense, but with **`Type` = Income**:
+
+| Property | Value |
+| --- | --- |
+| `Merchant` | Source, e.g. `Weekly allowance`, `Internship allowance` |
+| `Amount` | The amount received, **positive** (`Type` flips the sign, not you) |
+| `Type` | `Income` |
+| `Date` | When it arrived |
+| `Account` | 🏦 Bank balance (same relation as expenses) |
+
+Because `Delta = if(Type == "Income", Amount, -Amount)`, an income row *adds* to
+`Current balance`. The **By Category** board and the **Spending by Category** chart are
+filtered to `Type != Income`, so allowances never distort your spending stats — and the
+**💰 Income** view lists them on their own. Blank `Type` is treated as an expense, so
+existing rows and the manual/alert shortcuts (which set `Type` = Expense) are unaffected.
+
+> Recurring deposits like these are also good candidates for a **scheduled** Shortcut
+> automation (time-of-day triggers run unattended on iOS) — see `SHORTCUT.md`.
 
 ## Monthly reconciliation
 
