@@ -90,6 +90,7 @@ In the Shortcuts app, name it **Log Expense**.
 1. **Ask for Input** — Prompt `Amount?`, **Input Type: Number**. Rename output → `Amount`.
 2. **Ask for Input** — Prompt `Merchant?`, Input Type: Text. Rename output → `Merchant`.
 3. **Choose from List** — items: `Food`, `Transport`, `Groceries`, `Bills`, `Entertainment`, `Shopping`, `Health`, `Other`. Rename output → `Category`.
+   - **Dictionary** — map each category to an emoji (`Food : 🍔`, `Transport : 🚕`, `Groceries : 🛒`, `Bills : 💡`, `Entertainment : 🎬`, `Shopping : 🛍️`, `Health : 💊`, `Other : 📦`), then **Get Dictionary Value** → *Value* for *Key* = `Category` → rename → `Icon`. This becomes the row's page icon.
 4. **Current Date**.
 5. **Format Date** — Date Format: **Custom**, Format String: `yyyy-MM-dd`. Feed Current Date in. Rename output → `Today`. (Without this step the date arrives as `29/05/2026, 12:00`, which Notion rejects — it needs ISO 8601.)
 6. **Text** — paste the JSON below, then replace each `[bracketed]` placeholder by inserting the matching Magic Variable. **Amount stays unquoted; everything else stays inside its quotes.** `Account` has no chooser — it's hardcoded to your one account, so paste your `<ACCOUNT_PAGE_ID>` once and forget it.
@@ -97,6 +98,7 @@ In the Shortcuts app, name it **Log Expense**.
    ```json
    {
      "parent": { "database_id": "<YOUR_DB_ID>" },
+     "icon": { "emoji": "[Icon]" },
      "properties": {
        "Merchant": {
          "title": [ { "text": { "content": "[Merchant]" } } ]

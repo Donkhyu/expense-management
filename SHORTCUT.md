@@ -74,6 +74,20 @@ In the Shortcuts app, create a new shortcut named **Log Expense from Alert**.
 5. **Choose from Menu** — `Food`, `Transport`, `Groceries`, `Bills`, `Entertainment`,
    `Shopping`, `Health`, `Other` → rename → `Category`. (See *Auto-category* below to
    skip this for known merchants.)
+   Then map the category to an emoji for the page icon:
+   - **Dictionary** action:
+     ```
+     Food : 🍔
+     Transport : 🚕
+     Groceries : 🛒
+     Bills : 💡
+     Entertainment : 🎬
+     Shopping : 🛍️
+     Health : 💊
+     Other : 📦
+     ```
+   - **Get Dictionary Value** → *Value* for *Key* = `Category` → rename → `Icon`.
+   - (For an income shortcut, skip the lookup and just use `💰`.)
 6. **Current Date** → **Format Date** (Custom, format string `yyyy-MM-dd`) → rename → `Today`.
    - Required: Notion needs ISO 8601 (`2026-05-31`), not `31/05/2026, 12:00`.
 7. **Text** — paste the JSON below, then replace each `[bracket]` by inserting the
@@ -81,6 +95,7 @@ In the Shortcuts app, create a new shortcut named **Log Expense from Alert**.
    ```json
    {
      "parent": { "database_id": "<YOUR_DB_ID>" },
+     "icon": { "emoji": "[Icon]" },
      "properties": {
        "Merchant":    { "title":    [ { "text": { "content": "[Merchant]" } } ] },
        "Amount":      { "number":   [Amount] },
