@@ -110,6 +110,11 @@ In the Shortcuts app, create a new shortcut named **Log Expense from Alert**.
    ```
    > ⚠️ **Smart-quote trap.** Disable **Settings → General → Keyboard → Smart
    > Punctuation** first, or iOS turns `"` into curly `“ ”` and the JSON breaks.
+   > **Not set by the Shortcut:** the `Budget` and `Goal` relations are tagged later
+   > in Notion (the worklist/board views make it a quick habit — see `SETUP.md`), so
+   > there are no per-category or per-goal page IDs to hardcode here. `Type` is fixed
+   > to `Expense` and `Account` to your default — change either in Notion for income,
+   > transfers, or a non-default account.
 8. **Get Contents of URL** — `https://api.notion.com/v1/pages`:
    - **Method:** `POST`
    - **Headers:** `Authorization` → `Bearer <YOUR_TOKEN>`, `Notion-Version` → `2022-06-28`,
