@@ -14,9 +14,10 @@ Every expense links to a single **bank-balance account**, and a formula keeps a 
 | ------------------- | ------------------------------------------------------------------ |
 | `<YOUR_DB_ID>`      | `36ec4ed7327b8083a0dec2161698e9ff` (Transactions database)         |
 | `<ACCOUNT_PAGE_ID>` | `afc516a99cdf4dc9b16d08a11ccc2ace` (🏦 Bank balance account row)    |
+| `<BUDGETS_DB_ID>`   | `14b07e1858844f1bb0dba4383c3ae29e` (Budgets database)              |
 | `<YOUR_TOKEN>`      | **secret** — store on-device only                                  |
 
-The databases live under a **💰 Expense Management** page, which also serves as a dashboard (auto-balance callout + both databases inline).
+The databases live under a **💰 Expense Management** page, which also serves as a dashboard (auto-balance callout + the **🎯 Budgets** board and the Transactions database inline).
 
 ---
 
@@ -37,6 +38,9 @@ The setup uses **two databases**: `Transactions` (one row per money movement —
 | `Type`        | Select           | `Expense` / `Income`. Blank counts as Expense. Drives `Delta`'s sign       |
 | `Auto-logged` | Checkbox         | Distinguishes auto entries from manual                                     |
 | `Delta`       | Formula          | `if(Type == "Income", Amount, -Amount)` — signed balance effect, summed by the account rollup |
+| `Budget`      | Relation         | → `Budgets`. Links a transaction to its category budget (see **Budgets**). Set manually |
+| `Month`       | Formula          | `formatDate(Date, "YYYY-MM")` — the row's month, used for grouping and the budget reset |
+| `ThisMonthExpense` | Formula     | Amount if the row is a *current-month* expense, else `0`. Summed by the Budget rollup so `Spent` auto-resets each month |
 
 Keep `Category` as a **Select** (keeps the Shortcut JSON simple). `Account` is a **Relation**, not a Select — that's what powers the auto-updating balance below.
 
@@ -55,6 +59,22 @@ A single row (`🏦 Bank balance`) representing your bank account.
 **How auto-balance works:** the Shortcut hard-links every new expense to this one account row. The rollup re-totals spending and `Current balance` recalculates instantly — no manual updating. Because there's a single account, the Shortcut never has to ask which account to use.
 
 > Tracking only the bank balance (not cash) is intentional — it keeps things to one account with zero per-expense choices.
+
+### `Budgets` database
+
+One row per spending category, each holding a monthly cap. A rollup totals only the **current month's** expenses linked to it, so budgets reset automatically on the 1st with no manual rollover.
+
+| Property        | Type     | Notes                                                                    |
+| --------------- | -------- | ------------------------------------------------------------------------ |
+| `Category`      | Title    | The category name, e.g. `Food`, `Transport`, `Shopping`                  |
+| `Monthly limit` | Number   | Ringgit (RM). Your cap for the month — **set this by hand per row**       |
+| `Transactions`  | Relation | Reverse side of `Transactions.Budget` — the rows counted toward this budget |
+| `Spent`         | Rollup   | Sum of `ThisMonthExpense` across related transactions (this month only)  |
+| `Remaining`     | Formula  | `Monthly limit - Spent` → headroom left this month                       |
+
+**How the monthly reset works:** `Spent` rolls up `Transactions.ThisMonthExpense`, which is `Amount` only when the row is an expense dated in the current month and `0` otherwise. When the month turns over, every prior row evaluates to `0`, so `Spent` falls back to `0` and `Remaining` returns to the full limit — no archiving or duplicating budget rows each month.
+
+> **Linking is manual.** A transaction only counts toward a budget once its `Budget` relation is set. New rows (manual button *or* Shortcut) start unlinked, so `Spent` undercounts until you link them — see **Budgets & monthly tracking** below for the worklist view that makes this a quick habit.
 
 ### Create the integration
 
@@ -196,6 +216,22 @@ existing rows and the manual/alert shortcuts (which set `Type` = Expense) are un
 
 > Recurring deposits like these are also good candidates for a **scheduled** Shortcut
 > automation (time-of-day triggers run unattended on iOS) — see `SHORTCUT.md`.
+
+## Budgets & monthly tracking
+
+The `Budgets` database (above) caps spending per category and resets every month on its own. Three views drive the workflow:
+
+| View | Where | What it shows |
+| --- | --- | --- |
+| **🎯 Budgets** | Dashboard | Per-category `Monthly limit · Spent · Remaining`, sorted by `Spent`. Your at-a-glance "how am I doing this month". |
+| **📆 Monthly** | Transactions | Date-sorted transactions. In the UI, **Group by → Month** for per-month subtotals (the API can't group by the `Month` formula, so set this grouping once by hand). |
+| **🔗 To link** | Transactions | The manual-linking worklist: every row whose `Budget` relation is still empty. Empty = nothing to do. |
+
+**Setup:** open **🎯 Budgets** and set a `Monthly limit` on each category row.
+
+**Routine:** budgets only count transactions whose `Budget` is linked, and new rows (manual button or Shortcut) arrive unlinked. So make it a habit — open **🔗 To link**, set each row's `Budget` to its matching category, and the list empties. Until you do, `Spent` undercounts.
+
+> This linking is deliberately manual. If clearing **🔗 To link** becomes a chore, the Shortcut can be extended to set the `Budget` relation at log time (it would need the budget row's page ID per category, mirroring how `Account` is hardcoded) — see `SHORTCUT.md`.
 
 ## Monthly reconciliation
 
