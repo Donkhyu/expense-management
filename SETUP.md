@@ -4,7 +4,7 @@ Personal expense logging via iOS Shortcuts → Notion. Two shortcuts:
 1. **Manual** — tap after a purchase, type amount/merchant (Home Screen / Lock Screen / Action Button).
 2. **Alert parser** — copy a Hong Leong Bank transaction alert and run the shortcut; it extracts amount + merchant for you. Build guide: **`SHORTCUT.md`**.
 
-Every expense links to a single **bank-balance account**, and a formula keeps a live running balance (starting balance − everything spent). Plus monthly reconciliation against the bank statement for whatever the alert parser misses.
+Every transaction links to one **account** (e.g. your main bank balance or Ryt Bank savings), and a per-row formula keeps each account's live running balance (starting balance ± everything that moved). Transfers between accounts net to zero across your total wealth. Plus monthly reconciliation against the bank statement for whatever the alert parser misses.
 
 > **Secrets:** never commit your Notion integration token. Store it only in the Shortcut on your phone. The only true secret is `<YOUR_TOKEN>`; the database and account IDs below are not secret (you still need the token to use them).
 
@@ -13,7 +13,8 @@ Every expense links to a single **bank-balance account**, and a formula keeps a 
 | Placeholder         | Value                                                              |
 | ------------------- | ------------------------------------------------------------------ |
 | `<YOUR_DB_ID>`      | `36ec4ed7327b8083a0dec2161698e9ff` (Transactions database)         |
-| `<ACCOUNT_PAGE_ID>` | `afc516a99cdf4dc9b16d08a11ccc2ace` (🏦 Bank balance account row)    |
+| `<ACCOUNT_PAGE_ID>` | `afc516a99cdf4dc9b16d08a11ccc2ace` (🏦 Bank balance account row — the Shortcut's default) |
+| `<RYT_ACCOUNT_PAGE_ID>` | `379c4ed7327b81759736d7f2c97d87fa` (🐷 Ryt Bank (Savings) account row) |
 | `<BUDGETS_DB_ID>`   | `14b07e1858844f1bb0dba4383c3ae29e` (Budgets database)              |
 | `<YOUR_TOKEN>`      | **secret** — store on-device only                                  |
 
@@ -23,7 +24,7 @@ The databases live under a **💰 Expense Management** page, which also serves a
 
 ## Phase 1 — Notion
 
-The setup uses **two databases**: `Transactions` (one row per money movement — expense *or* income) and `Accounts` (a single row holding your bank balance). Transactions link to the account via a Relation, and a rollup + formula on the account turn that into a live balance.
+The setup uses **three databases**: `Transactions` (one row per money movement — expense, income, or a transfer leg), `Accounts` (one row per account you hold), and `Budgets` (per-category monthly caps — see **Budgets**). Transactions link to an account via a Relation, and a rollup + formula on each account row turn that into a live balance.
 
 ### `Transactions` database
 
@@ -33,32 +34,32 @@ The setup uses **two databases**: `Transactions` (one row per money movement —
 | `Date`        | Date             |                                                                            |
 | `Amount`      | Number           | Number format set to **Ringgit** (RM)                                      |
 | `Category`    | Select           | Food, Transport, Groceries, Bills, Entertainment, Shopping, Health, Other  |
-| `Account`     | Relation         | → `Accounts`. Every expense points at the one bank-balance row             |
+| `Account`     | Relation         | → `Accounts`. Which account the money moved through. Shortcut defaults to Bank balance |
 | `Notes`       | Text             | Corrections, context                                                       |
-| `Type`        | Select           | `Expense` / `Income`. Blank counts as Expense. Drives `Delta`'s sign       |
+| `Type`        | Select           | `Expense` / `Income` / `Transfer Out` / `Transfer In`. Blank counts as Expense. Drives `Delta`'s sign |
 | `Auto-logged` | Checkbox         | Distinguishes auto entries from manual                                     |
-| `Delta`       | Formula          | `if(Type == "Income", Amount, -Amount)` — signed balance effect, summed by the account rollup |
+| `Delta`       | Formula          | `if(Type == "Income" or Type == "Transfer In", Amount, -Amount)` — signed balance effect, summed by each account's rollup |
 | `Budget`      | Relation         | → `Budgets`. Links a transaction to its category budget (see **Budgets**). Set manually |
 | `Month`       | Formula          | `formatDate(Date, "YYYY-MM")` — the row's month, used for grouping and the budget reset |
-| `ThisMonthExpense` | Formula     | Amount if the row is a *current-month* expense, else `0`. Summed by the Budget rollup so `Spent` auto-resets each month |
+| `ThisMonthExpense` | Formula     | Amount if the row is a *current-month* **expense** (income and transfers count `0`), else `0`. Summed by the Budget rollup so `Spent` auto-resets each month |
 
 Keep `Category` as a **Select** (keeps the Shortcut JSON simple). `Account` is a **Relation**, not a Select — that's what powers the auto-updating balance below.
 
 ### `Accounts` database
 
-A single row (`🏦 Bank balance`) representing your bank account.
+One row per account. Currently `🏦 Bank balance` (your main bank, the Shortcut's default) and `🐷 Ryt Bank (Savings)`.
 
 | Property           | Type      | Notes                                                            |
 | ------------------ | --------- | ---------------------------------------------------------------- |
 | `Account`          | Title     | The account name                                                 |
-| `Starting balance` | Number    | Your bank balance at the moment you started logging              |
+| `Starting balance` | Number    | The account's balance at the moment you started logging it       |
 | `Expenses`         | Relation  | Auto-created reverse side of `Transactions.Account` (Notion auto-named it) |
-| `Expenses total`   | Rollup    | Net sum of `Delta` across related transactions (income +, expense −)      |
-| `Current balance`  | Formula   | `Starting balance + Expenses total` → the live running balance   |
+| `Net change`       | Rollup    | Sum of `Delta` across that account's transactions (income/transfer-in +, expense/transfer-out −) |
+| `Current balance`  | Formula   | `Starting balance + Net change` → the account's live running balance |
 
-**How auto-balance works:** the Shortcut hard-links every new expense to this one account row. The rollup re-totals spending and `Current balance` recalculates instantly — no manual updating. Because there's a single account, the Shortcut never has to ask which account to use.
+**How auto-balance works:** each transaction's `Account` relation routes its `Delta` into that account's `Net change` rollup, and `Current balance` recalculates instantly — no manual updating. The same machinery scales to any number of accounts: each row totals only its own transactions. Your **total net worth** is the sum of every account's `Current balance` — set the `Current balance` column footer to **Sum** in the Accounts table to show it.
 
-> Tracking only the bank balance (not cash) is intentional — it keeps things to one account with zero per-expense choices.
+> **The Shortcut still defaults to `🏦 Bank balance`** (no account picker — keeps logging to one tap). For a purchase or transfer on another account, open the row afterward and switch `Account`. New here? Set `Starting balance` on the Ryt Bank row (created at `0`) to your real savings balance.
 
 ### `Budgets` database
 
@@ -95,7 +96,7 @@ databases. (Or connect `Transactions` and `Accounts` individually.)
 ### Grab the IDs you'll need in the Shortcut
 
 - **`<YOUR_DB_ID>`** — open the `Transactions` DB as a full page in the browser. URL is `notion.so/<workspace>/<32-char-id>?v=...`. The 32-char hex string is the DB ID.
-- **`<ACCOUNT_PAGE_ID>`** — open the single account row (`🏦 Bank balance`) as a full page. The 32-char hex string in its URL is the page ID. This is what the `Account` relation points to. (Concrete values are in the *Reference — this workspace's IDs* table near the top.)
+- **`<ACCOUNT_PAGE_ID>`** — open the `🏦 Bank balance` account row (the Shortcut's default) as a full page. The 32-char hex string in its URL is the page ID. This is what the `Account` relation points to. Each additional account (e.g. `🐷 Ryt Bank (Savings)`) has its own page ID — see the *Reference — this workspace's IDs* table near the top.
 
 ---
 
@@ -216,6 +217,21 @@ existing rows and the manual/alert shortcuts (which set `Type` = Expense) are un
 
 > Recurring deposits like these are also good candidates for a **scheduled** Shortcut
 > automation (time-of-day triggers run unattended on iOS) — see `SHORTCUT.md`.
+
+## Transfers between accounts
+
+Moving money between your own accounts — reloading an e-wallet, sweeping cash into Ryt savings — isn't spending or income, so it's logged as **two rows** that net to zero across your total wealth:
+
+| Row | `Type` | `Account` | `Amount` | Effect |
+| --- | --- | --- | --- | --- |
+| Out of source | `Transfer Out` | the account money leaves | the amount, positive | `Delta` is **−** → source `Current balance` drops |
+| Into destination | `Transfer In` | the account money enters | the same amount, positive | `Delta` is **+** → destination `Current balance` rises |
+
+Example — moving RM200 from Bank to Ryt savings: one `Transfer Out` row on `🏦 Bank balance` and one `Transfer In` row on `🐷 Ryt Bank (Savings)`, both RM200. Bank drops 200, Ryt rises 200, total net worth unchanged.
+
+Because `Delta = if(Type == "Income" or Type == "Transfer In", Amount, -Amount)`, the signs are automatic — always enter `Amount` as a positive number. Transfers are excluded from spending stats: `ThisMonthExpense` (so budgets) counts only `Expense` rows, and the **🗂️ By Category** board filters all transfer + income rows out. The **↔️ Transfers** view lists both legs together so you can eyeball that each pair matches.
+
+> No Shortcut support for transfers — they're occasional, so add the two rows by hand with the **New** button (or duplicate an existing pair). If a spending **chart block** on the dashboard was set to `Type != Income`, widen its filter to also exclude `Transfer Out`/`Transfer In` so transfers don't show up as spend.
 
 ## Budgets & monthly tracking
 
