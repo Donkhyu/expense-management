@@ -17,6 +17,7 @@ Every transaction links to one **account** (e.g. your main bank balance or Ryt B
 | `<RYT_ACCOUNT_PAGE_ID>` | `379c4ed7327b81759736d7f2c97d87fa` (🐷 Ryt Bank (Savings) account row) |
 | `<BUDGETS_DB_ID>`   | `14b07e1858844f1bb0dba4383c3ae29e` (Budgets database)              |
 | `<GOALS_DB_ID>`     | `c52f5e42b36248a69b7de903d2d09e55` (🏆 Savings Goals database)      |
+| `<RECURRING_DB_ID>` | `4409c590ebb84edc9f73c809ec482c3c` (🔁 Recurring database)          |
 | `<YOUR_TOKEN>`      | **secret** — store on-device only                                  |
 
 The databases live under a **💰 Expense Management** page, which also serves as a dashboard (auto-balance callout + the **🎯 Budgets** board and the Transactions database inline).
@@ -25,7 +26,7 @@ The databases live under a **💰 Expense Management** page, which also serves a
 
 ## Phase 1 — Notion
 
-The setup uses **four databases**: `Transactions` (one row per money movement — expense, income, or a transfer leg), `Accounts` (one row per account you hold), `Budgets` (per-category monthly caps — see **Budgets**), and `Savings Goals` (targets you fund by tagging deposits — see **Savings Goals**). Transactions link to an account via a Relation, and a rollup + formula on each account row turn that into a live balance.
+The setup uses **five databases**: `Transactions` (one row per money movement — expense, income, or a transfer leg), `Accounts` (one row per account you hold), `Budgets` (per-category monthly caps — see **Budgets**), `Savings Goals` (targets you fund by tagging deposits — see **Savings Goals**), and `Recurring` (your subscriptions and standing costs — see **Recurring**). Transactions link to an account via a Relation, and a rollup + formula on each account row turn that into a live balance.
 
 ### `Transactions` database
 
@@ -103,6 +104,26 @@ One row per savings goal (Emergency Fund, a trip, a big purchase). Progress is *
 The **🎯 Progress** board groups goals by `Priority` and shows `Status`, `Saved`, `Progress` and `Monthly needed` on each card. (Notion can't group a board by a formula, so `Status` lives on the card rather than as the column.)
 
 > **Two manual touches:** ① set each deposit's `Goal` (same habit as `Budget` — the Shortcut doesn't set it). ② One-time, open the `Progress` property and switch its display to **Bar** (as a percentage) for the visual progress bar.
+
+### `🔁 Recurring` database
+
+A reference list of your standing costs — rent, insurance, streaming, phone, gym. It doesn't auto-create transactions; it's the at-a-glance "what's leaving my account every month" picture, and it normalises every billing cadence to a comparable monthly figure.
+
+| Property             | Type     | Notes                                                                       |
+| -------------------- | -------- | --------------------------------------------------------------------------- |
+| `Name`               | Title    | The subscription / bill name                                                |
+| `Amount`             | Number   | Ringgit (RM) charged **per cycle**                                          |
+| `Cadence`            | Select   | Weekly / Monthly / Quarterly / Yearly                                       |
+| `Next due`           | Date     | When it next hits                                                           |
+| `Category`           | Select   | Same categories as Transactions, so it maps onto your budgets               |
+| `Account`            | Relation | → `Accounts`. Which account pays it                                         |
+| `Active`             | Checkbox | Pause a subscription without deleting its history                           |
+| `Monthly equivalent` | Formula  | Normalises any cadence to a per-month cost (Yearly ÷ 12, Quarterly ÷ 3, Weekly × 52 ÷ 12) |
+| `Annual cost`        | Formula  | The same cost expressed per year                                            |
+
+**Monthly burden:** the **📅 Upcoming** view lists active items soonest-first; set the `Monthly equivalent` column footer to **Sum** to see your total monthly subscription load (and `Annual cost` → Sum for the yearly figure).
+
+> **Logging the actual charge:** when a recurring bill is paid, it still needs a real `Transactions` row to affect your balance — either log it manually or, optionally, add a Notion **button** on each Recurring row that creates a matching transaction in one tap (button properties are a UI-only add; the API can't script them).
 
 ### Create the integration
 
