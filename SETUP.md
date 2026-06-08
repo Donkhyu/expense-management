@@ -19,9 +19,10 @@ Every transaction links to one **account** (e.g. your main bank balance or Ryt B
 | `<GOALS_DB_ID>`     | `c52f5e42b36248a69b7de903d2d09e55` (🏆 Savings Goals database)      |
 | `<RECURRING_DB_ID>` | `4409c590ebb84edc9f73c809ec482c3c` (🔁 Recurring database)          |
 | `<NETWORTH_DB_ID>`  | `6f4475655a3445d48af77c5c6846211e` (📈 Net Worth database)          |
+| `<OVERVIEW_PAGE_ID>`| `379c4ed7327b819d8bbce75cb8b8616b` (📊 Overview dashboard page)     |
 | `<YOUR_TOKEN>`      | **secret** — store on-device only                                  |
 
-The databases live under a **💰 Expense Management** page, which also serves as a dashboard (auto-balance callout + the **🎯 Budgets** board and the Transactions database inline).
+The databases live under a **💰 Expense Management** page (auto-balance callout + the **🎯 Budgets** board and the Transactions database inline). A dedicated **📊 Overview** sub-page collects net worth, spending, goals and recurring costs into one dashboard — see **Overview dashboard**.
 
 ---
 
@@ -312,6 +313,21 @@ The `Budgets` database (above) caps spending per category and resets every month
 **Routine:** budgets only count transactions whose `Budget` is linked, and new rows (manual button or Shortcut) arrive unlinked. So make it a habit — open **🔗 To link**, set each row's `Budget` to its matching category, and the list empties. Until you do, `Spent` undercounts.
 
 > This linking is deliberately manual. If clearing **🔗 To link** becomes a chore, the Shortcut can be extended to set the `Budget` relation at log time (it would need the budget row's page ID per category, mirroring how `Account` is hardcoded) — see `SHORTCUT.md`.
+
+## 📊 Overview dashboard
+
+A dedicated **📊 Overview** page (under 💰 Expense Management) pulls everything into one screen via linked views, all live from the underlying databases:
+
+| Block | Source | Shows |
+| --- | --- | --- |
+| **🏦 Accounts & Net Worth** | Accounts | Each account's `Current balance`. Set the column footer to **Sum** for total net worth. |
+| **📈 Net Worth Trend** | Net Worth | Line chart of `Total` over time (see **Net Worth** for the monthly snapshot habit). |
+| **🗂️ Spending by Category** | Transactions | Donut of expenses by category. |
+| **💵 Income vs Expense** | Transactions | Bar chart by date, stacked by `Type`. |
+| **🏆 Goal Progress** | Savings Goals | Goals by `Priority` with `Status`, `Saved`, `Progress`, `Monthly needed`. |
+| **🔁 Recurring (active)** | Recurring | Active subscriptions, soonest-due first. |
+
+> **Chart finishing (one-time, in the UI).** The API can't set a chart's measure or date granularity, so each chart is created grouped correctly but defaults to *count*. For the three spend charts open each → set **Y-axis** to **Sum of `Amount`**; for **Net Worth Trend** set Y to **Sum of `Total`**; and for the time-based charts set the date grouping to **Month**. One click each, then they're done for good.
 
 ## Monthly reconciliation
 
