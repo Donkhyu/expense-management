@@ -16,6 +16,7 @@ Every transaction links to one **account** (e.g. your main bank balance or Ryt B
 | `<ACCOUNT_PAGE_ID>` | `afc516a99cdf4dc9b16d08a11ccc2ace` (🏦 Bank balance account row — the Shortcut's default) |
 | `<RYT_ACCOUNT_PAGE_ID>` | `379c4ed7327b81759736d7f2c97d87fa` (🐷 Ryt Bank (Savings) account row) |
 | `<BUDGETS_DB_ID>`   | `14b07e1858844f1bb0dba4383c3ae29e` (Budgets database)              |
+| `<GOALS_DB_ID>`     | `c52f5e42b36248a69b7de903d2d09e55` (🏆 Savings Goals database)      |
 | `<YOUR_TOKEN>`      | **secret** — store on-device only                                  |
 
 The databases live under a **💰 Expense Management** page, which also serves as a dashboard (auto-balance callout + the **🎯 Budgets** board and the Transactions database inline).
@@ -24,7 +25,7 @@ The databases live under a **💰 Expense Management** page, which also serves a
 
 ## Phase 1 — Notion
 
-The setup uses **three databases**: `Transactions` (one row per money movement — expense, income, or a transfer leg), `Accounts` (one row per account you hold), and `Budgets` (per-category monthly caps — see **Budgets**). Transactions link to an account via a Relation, and a rollup + formula on each account row turn that into a live balance.
+The setup uses **four databases**: `Transactions` (one row per money movement — expense, income, or a transfer leg), `Accounts` (one row per account you hold), `Budgets` (per-category monthly caps — see **Budgets**), and `Savings Goals` (targets you fund by tagging deposits — see **Savings Goals**). Transactions link to an account via a Relation, and a rollup + formula on each account row turn that into a live balance.
 
 ### `Transactions` database
 
@@ -40,6 +41,7 @@ The setup uses **three databases**: `Transactions` (one row per money movement �
 | `Auto-logged` | Checkbox         | Distinguishes auto entries from manual                                     |
 | `Delta`       | Formula          | `if(Type == "Income" or Type == "Transfer In", Amount, -Amount)` — signed balance effect, summed by each account's rollup |
 | `Budget`      | Relation         | → `Budgets`. Links a transaction to its category budget (see **Budgets**). Set manually |
+| `Goal`        | Relation         | → `Savings Goals`. Tag a deposit to a savings goal so it counts toward that goal (see **Savings goals**). Set manually |
 | `Month`       | Formula          | `formatDate(Date, "YYYY-MM")` — the row's month, used for grouping and the budget reset |
 | `ThisMonthExpense` | Formula     | Amount if the row is a *current-month* **expense** (income and transfers count `0`), else `0`. Summed by the Budget rollup so `Spent` auto-resets each month |
 
@@ -76,6 +78,31 @@ One row per spending category, each holding a monthly cap. A rollup totals only 
 **How the monthly reset works:** `Spent` rolls up `Transactions.ThisMonthExpense`, which is `Amount` only when the row is an expense dated in the current month and `0` otherwise. When the month turns over, every prior row evaluates to `0`, so `Spent` falls back to `0` and `Remaining` returns to the full limit — no archiving or duplicating budget rows each month.
 
 > **Linking is manual.** A transaction only counts toward a budget once its `Budget` relation is set. New rows (manual button *or* Shortcut) start unlinked, so `Spent` undercounts until you link them — see **Budgets & monthly tracking** below for the worklist view that makes this a quick habit.
+
+### `🏆 Savings Goals` database
+
+One row per savings goal (Emergency Fund, a trip, a big purchase). Progress is **tag-based**: any transaction whose `Goal` relation points here counts toward the goal, so a goal can draw from any account and you decide which deposits "count."
+
+| Property         | Type     | Notes                                                                       |
+| ---------------- | -------- | --------------------------------------------------------------------------- |
+| `Goal`           | Title    | The goal name                                                               |
+| `Target amount`  | Number   | Ringgit (RM). What you're aiming for                                        |
+| `Start date`     | Date     | When you started saving — anchors the on-track/behind pace check            |
+| `Target date`    | Date     | Deadline — drives `Months left` and `Status`                                |
+| `Priority`       | Select   | High / Medium / Low (the board groups by this)                              |
+| `Contributions`  | Relation | Reverse side of `Transactions.Goal` — every deposit tagged to this goal     |
+| `Saved`          | Rollup   | Sum of `Delta` across contributions (deposits add, withdrawals subtract)    |
+| `Progress`       | Formula  | `Saved ÷ Target amount` (0–1). Show it as a **bar/percent** in the UI for a progress bar |
+| `Remaining`      | Formula  | `Target amount − Saved`, clamped at `0`                                     |
+| `Months left`    | Formula  | Whole months from now to `Target date`                                      |
+| `Monthly needed` | Formula  | `Remaining ÷ Months left` — what to set aside each month to land on time    |
+| `Status`         | Formula  | ✅ Reached / 🟢 On track / 🔴 Behind / ⏰ Overdue, judged against the time elapsed vs. the target window |
+
+**How it works:** to fund a goal, log the deposit as a normal transaction — usually a `Transfer In` (or `Income`) into your savings account — and set its `Goal` relation. `Saved` rolls up the signed `Delta`, so a later `Transfer Out` tagged to the same goal correctly *reduces* the saved amount. Because contributions are just tagged transactions, transfers between your own accounts still net to zero on net worth while also advancing the goal.
+
+The **🎯 Progress** board groups goals by `Priority` and shows `Status`, `Saved`, `Progress` and `Monthly needed` on each card. (Notion can't group a board by a formula, so `Status` lives on the card rather than as the column.)
+
+> **Two manual touches:** ① set each deposit's `Goal` (same habit as `Budget` — the Shortcut doesn't set it). ② One-time, open the `Progress` property and switch its display to **Bar** (as a percentage) for the visual progress bar.
 
 ### Create the integration
 
