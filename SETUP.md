@@ -26,6 +26,7 @@ plus monthly reconciliation against the bank statement.
 | `<RECURRING_DB_ID>`    | `4409c590ebb84edc9f73c809ec482c3c` (🔁 Recurring database)         |
 | `<NETWORTH_DB_ID>`     | `6f4475655a3445d48af77c5c6846211e` (📈 Net Worth database)         |
 | `<DASHBOARD_PAGE_ID>`  | `37ac4ed7327b81c3b247ef68c93848b8` (💰 Finance dashboard)          |
+| `<DATABASES_PAGE_ID>`  | `37ac4ed7327b817bb2d9e585dc7b780f` (🗄️ Databases — holds the raw DBs) |
 | `<YOUR_TOKEN>`         | **secret** — store on-device only                                 |
 
 Category row IDs (for the Shortcut's `Category` relation):
@@ -41,8 +42,11 @@ Category row IDs (for the Shortcut's `Category` relation):
 | Health | `37ac4ed7327b81b5885ecb120ef45b7f` |
 | Other | `37ac4ed7327b81b9bccfeb50d139c1dd` |
 
-Everything lives under the **💰 Expense Management** page; the day-to-day dashboard is the
-**💰 Finance** sub-page (linked views of every database).
+**Structure** — everything lives under the **💰 Expense Management** page (the page your
+integration token is connected to, so it must stay):
+
+- **💰 Finance** — the dashboard you use day-to-day: linked views (and charts) of the databases.
+- **🗄️ Databases** — the raw source databases the dashboard reads from, tucked out of the way.
 
 ---
 
