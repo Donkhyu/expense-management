@@ -42,11 +42,16 @@ Category row IDs (for the Shortcut's `Category` relation):
 | Health | `37ac4ed7327b81b5885ecb120ef45b7f` |
 | Other | `37ac4ed7327b81b9bccfeb50d139c1dd` |
 
-**Structure** — everything lives under the **💰 Expense Management** page (the page your
-integration token is connected to, so it must stay):
+**Structure** — the home page is **💰 Finance**:
 
 - **💰 Finance** — the dashboard you use day-to-day: linked views (and charts) of the databases.
-- **🗄️ Databases** — the raw source databases the dashboard reads from, tucked out of the way.
+  - **🗄️ Databases** — nested under Finance; the raw source databases the dashboard reads from.
+
+> **Connect the integration to 💰 Finance** (`⋯ → Connections → Expense Shortcut`). The
+> connection cascades down to 🗄️ Databases and every database, so the iOS Shortcut can write
+> to `Expenses` and resolve the `Account`/`Category` relations. (The setup originally lived
+> under an *Expense Management* wrapper page, now retired — if logging ever 401s, it's almost
+> always because the connection didn't follow the move; re-add it on Finance.)
 
 ---
 
@@ -174,10 +179,11 @@ UI-only finishes the API can't do:
 3. Copy the token (`secret_…` / `ntn_…`); store on-device only.
 
 ### Connect the databases
-Open the **💰 Expense Management** page → `⋯` → **Connections** → add **Expense Shortcut**.
-Connecting the parent cascades to the child databases (Expenses, Accounts, Categories, …).
-The Shortcut writes to **Expenses** and references rows in **Accounts** and **Categories**,
-so all three must be shared or the relation returns `object_not_found`.
+Open the **💰 Finance** page → `⋯` → **Connections** → add **Expense Shortcut**. Connecting
+the home page cascades to the nested **🗄️ Databases** page and every database under it
+(Expenses, Accounts, Categories, …). The Shortcut writes to **Expenses** and references rows
+in **Accounts** and **Categories**, so all three must be shared or the relation returns
+`object_not_found`.
 
 ### Logging
 The iOS Shortcut creates a row in the **Expenses** DB — title `Expense`, plus `Amount`,
